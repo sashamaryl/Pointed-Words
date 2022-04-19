@@ -1,5 +1,4 @@
 import React, { useCallback, useState } from "react";
-import Card from "react-bootstrap/Card";
 
 export type PointCardType = {
   id: number;
@@ -9,28 +8,26 @@ export type PointCardType = {
 
 export type PointCardPropsType = {
   pointCard: PointCardType;
-  chooseCard: (pointCard: PointCardType) => void;
+  chooseCard: (id: number) => void;
   unChooseCard: (id: number) => void;
+  used: boolean;
 };
 
-export default function PointCard({ pointCard, chooseCard, unChooseCard }: PointCardPropsType) {
+export default function PointCard({
+  pointCard,
+  chooseCard,
+  unChooseCard,
+  used,
+}: PointCardPropsType) {
   const { id, value, letter } = pointCard;
 
-  const [selected, setSelected] = useState(false);
-
   const handleClick = useCallback(() => {
-    if (selected) {
-      setSelected(false);
-      unChooseCard(id);
-    } else {
-      setSelected(true);
-      chooseCard(pointCard);
-    }
-  }, [chooseCard, id, pointCard, selected, unChooseCard]);
+    used ? unChooseCard(id) : chooseCard(id);
+  }, [chooseCard, id, unChooseCard, used]);
 
-  const bgColor = selected ? "bg-primary" : "bg-light";
-  const textColor = selected ? "text-light" : "text-dark";
-  const cardClass = "border border-2 border-medium";
+  const bgColor = used ? "bg-primary" : "bg-light";
+  const textColor = used ? "text-light" : "text-dark";
+  const cardClass = "border border-2 border-medium rounded";
 
   const cardStyle = {
     height: "auto",
@@ -38,13 +35,9 @@ export default function PointCard({ pointCard, chooseCard, unChooseCard }: Point
   };
 
   return (
-      <Card className={`${cardClass} ${bgColor}`} style={cardStyle} onClick={handleClick}>
-        <Card.Header className='text-start text-muted text'>
-          <div className={`${textColor} text-start`}>{value} point</div>
-        </Card.Header>
-        <Card.Body>
-          <Card.Title className={`${textColor} fs-1 text-uppercase`}>{letter}</Card.Title>
-        </Card.Body>
-      </Card>
+    <div className={`${cardClass} ${bgColor}`} style={cardStyle} onClick={handleClick}>
+      <div className={`${textColor} text-start ms-1`}>{value} point</div>
+      <div className={`${textColor} fs-1 text-uppercase`}>{letter}</div>
+    </div>
   );
 }
