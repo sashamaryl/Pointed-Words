@@ -6,7 +6,8 @@ export default async function isValidWord(word: string) {
   const queryURL = `https://api.wordnik.com/v4/word.json/${word}/definitions?limit=200&includeRelated=false&useCanonical=false&includeTags=false&api_key=${key}`;
 
   try {
-    const { data } = await axios.get(queryURL);
+    const { data, status } = await axios.get(queryURL);
+    console.log(status)
     return data[0].word === word;
   } catch (error) {
     console.log("error", error);
