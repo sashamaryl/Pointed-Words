@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Col, Row, Stack } from "react-bootstrap";
+import React, { useCallback, useEffect, useState } from "react";
+import { Button, Col, Collapse, Fade, Row, Stack } from "react-bootstrap";
 import Container from "react-bootstrap/esm/Container";
 import "./App.css";
 import "./custom.scss";
-import PointCard, { PointCardType } from "./PointCard";
 import isValidWord from "./dictionary";
+import PointCard, { PointCardType } from "./PointCard";
 import useCardDeck from "./usecarddeck";
 
 function App() {
@@ -13,12 +13,14 @@ function App() {
         cardDeck,
         gridCards,
         handCards,
+        clearCards,
+        tradeInHandCard,
+        refillGrid,
         deal,
         drawOne,
         drawNumber,
         idCardLookup,
         idCardLookupMulti,
-        makeNewDeck,
     } = useCardDeck();
 
     const gridAreas: { [id: number]: number[] } = {
@@ -35,10 +37,17 @@ function App() {
 
     const [usedCardIds, setUsedCardIds] = useState<number[]>([]);
     const [usedCards, setUsedCards] = useState<PointCardType[]>([]);
+
     const [pointTotal, setPointTotal] = useState(0);
     const [score, setScore] = useState(0);
     const [shouldAcceptWord, setShouldAcceptWord] = useState<boolean | undefined>(undefined);
     const [willAcceptWord, setWillAcceptWord] = useState<boolean | undefined>(undefined);
+    const [canTradeHand, setCanTradeHand] = useState<boolean>(false);
+    const [tradeCards, setTradeCards] = useState<number[]>([]);
+
+    const [isTransitioning, setIsTransitioning] = useState(false);
+
+    const [isGameActive, setIsGameActive] = useState(false);
 
     const wait = useCallback((miliseconds: number = 2000): Promise<boolean> => {
         return new Promise((resolve) =>
@@ -72,6 +81,7 @@ function App() {
         card && setUsedCards([...usedCards, card]);
         setUsedCardIds([...usedCardIds, cardId]);
         setShouldAcceptWord(undefined);
+        setWillAcceptWord(undefined);
     };
 
     const unChooseCard = (id: number) => {
@@ -80,13 +90,18 @@ function App() {
         const filteredIds = usedCardIds.filter((usedId) => usedId !== id);
         setUsedCardIds(filteredIds);
         setShouldAcceptWord(undefined);
+        setWillAcceptWord(undefined);
     };
 
-    const reset = useCallback(() => {
+    const setUpNextHand = useCallback(() => {
         setUsedCards([]);
         setUsedCardIds([]);
+        tradeCards.forEach(tradeInHandCard);
+        setCanTradeHand(false);
+        setTradeCards([]);
         resetChecks();
-    }, []);
+        refillGrid(usedCards);
+    }, [refillGrid, tradeCards, tradeInHandCard, usedCards]);
 
     const resetChecks = () => {
         setShouldAcceptWord(undefined);
@@ -112,14 +127,17 @@ function App() {
         isValidWord(word)
             .then((ans) => setShouldAcceptWord(ans))
             .then(() => wait().then(resetChecks));
-
     }, [getWordFromCards, shouldAcceptWord, wait]);
 
-
     const startNewGame = () => {
-        reset();
-        makeNewDeck();
+        setIsGameActive(true);
+        setUpNextHand();
         deal();
+    };
+
+    const endGame = () => {
+        clearCards();
+        setIsGameActive(false);
     };
 
     const submit = useCallback(() => {
@@ -129,10 +147,13 @@ function App() {
             isValidWord(word)
                 .then((ans) => {
                     setWillAcceptWord(ans);
+                    return ans;
                 })
-                .then(() => {
-                    addToScore(pointTotal);
-                    wait().then(reset);
+                .then((ans) => {
+                    if (ans) {
+                        addToScore(pointTotal);
+                        setCanTradeHand(true);
+                    }
                 });
             return;
         }
@@ -140,89 +161,130 @@ function App() {
             resetChecks();
             return;
         }
-    }, [addToScore, getWordFromCards, pointTotal, reset, wait, willAcceptWord]);
+    }, [addToScore, getWordFromCards, pointTotal, willAcceptWord]);
 
     return (
-        <div className='App bg-light' style={{ height: "100vh", width: "100vw" }}>
-            <Container className='h-100 bg-secondary'>
-                <Row className='' style={{ height: "4rem" }}>
-                    <Col></Col>
-                    <Col className='col-9'>
-                        <div className='d-flex flex-row'>
-                            {usedCards.map((card) => (
-                                <div key={`${card.id}`} className='d-flex flex-row flex-grow-0'>
-                                    <div className='fs-6 mt-0 ms-0 text-light'>{card.value}</div>
-                                    <div className='py-1 px-2 m-1 fs-1 text-light '>
-                                        {card.letter}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </Col>
-                    <Col></Col>
-                </Row>
-                <Row className=''>
-                    <Col></Col>
-                    <Col className='justify-content-center'>
-                        <div className='d-grid gap-3'>
-                            {gridCards.map((card: PointCardType, index: number) => {
-                                const { id } = card;
-                                const gridArea = gridAreas[index];
-                                return (
-                                    <div
-                                        key={id}
-                                        style={{
-                                            gridRowStart: gridArea ? gridArea[0] : 0,
-                                            gridColumnStart: gridArea ? gridArea[1] : 0,
-                                        }}
-                                    >
-                                        <PointCard
-                                            pointCard={card}
-                                            chooseCard={chooseCard}
-                                            unChooseCard={unChooseCard}
-                                            used={usedCardIds.includes(id)}
-                                        />
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        <div className='row mt-5'>
-                            <div className='text-light mb-2'>Your Cards</div>
-                            <div className='d-flex gap-3 justify-content-center bg-alert'>
-                                {handCards.map((card: PointCardType) => {
+        <div className='App bg-secondary' style={{ height: "100vh", width: "100vw" }}>
+            <Container className='h-100'>
+                <Row className='pt-5'>
+                    <div className='d-flex row justify-content-flex-start border m-auto'>
+                        {usedCards.map((card) => (
+                            <div
+                                key={`${card.id}`}
+                                className='d-flex col justify-content-start flex-shrink-1 bg-light m-2 rounded'
+                            >
+                                <div className='fs-6 mt-0 ms-0 text-dark'>{card.value}</div>
+                                <div className='py-1 px-2 m-1 fs-1 text-dark '>{card.letter}</div>
+                            </div>
+                        ))}
+                        <div className='col'></div>
+                    </div>
+                    <div className='d-flex flex-wrap flex-md-nowrap m-auto  m-auto'>
+                        <div className='d-flex flex-wrap justify-content-center  '>
+                            <div className='d-grid gap-3'>
+                                {gridCards.map((card: PointCardType, index: number) => {
                                     const { id } = card;
+                                    const gridArea = gridAreas[index];
                                     return (
-                                        <div className='' key={id}>
+                                        <div
+                                            key={id}
+                                            style={{
+                                                gridRowStart: gridArea ? gridArea[0] : 0,
+                                                gridColumnStart: gridArea ? gridArea[1] : 0,
+                                            }}
+                                        >
                                             <PointCard
                                                 pointCard={card}
                                                 chooseCard={chooseCard}
                                                 unChooseCard={unChooseCard}
                                                 used={usedCardIds.includes(id)}
+                                                shouldFade={
+                                                    !(willAcceptWord && usedCardIds.includes(id))
+                                                }
                                             />
                                         </div>
                                     );
                                 })}
                             </div>
-                        </div>
-                    </Col>
-                    <Col className='col-2 flex-column'>
-                        <Row className='my-2'>
-                            <div className='text-light text-start'>Word Points: {pointTotal}</div>
-                            <div className='text-light text-start'>
-                                Word Length: {usedCards.length}
+                            <div className='row mt-5'>
+                                <div className='text-light mb-2'>
+                                    {handCards.length > 0 && "Your Cards"}
+                                </div>
+                                <div className='d-flex gap-3 justify-content-center bg-alert'>
+                                    {handCards.map((card: PointCardType, index: number) => {
+                                        const { id } = card;
+                                        return (
+                                            <div className='' key={id}>
+                                                <PointCard
+                                                    pointCard={card}
+                                                    chooseCard={chooseCard}
+                                                    unChooseCard={unChooseCard}
+                                                    used={usedCardIds.includes(id)}
+                                                    shouldFade={
+                                                        !(
+                                                            canTradeHand &&
+                                                            tradeCards.includes(index)
+                                                        )
+                                                    }
+                                                />
+                                                <Fade in={canTradeHand} appear>
+                                                    <Button
+                                                        className={`${
+                                                            tradeCards.includes(index)
+                                                                ? "bg-secondary"
+                                                                : "bg-blue"
+                                                        }`}
+                                                        onClick={() => {
+                                                            tradeCards.includes(index)
+                                                                ? setTradeCards((prevState) => {
+                                                                      return prevState.filter(
+                                                                          (c) => c !== index
+                                                                      );
+                                                                  })
+                                                                : setTradeCards((prevState) => [
+                                                                      ...prevState,
+                                                                      index,
+                                                                  ]);
+                                                        }}
+                                                    >
+                                                        {tradeCards.includes(index)
+                                                            ? "Traded"
+                                                            : "Trade In"}
+                                                    </Button>
+                                                </Fade>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </Row>
-                        <Row>
-                            <Stack gap={3} className='col-6'>
+                        </div>
+                        <div className='d-flex flex-nowrap flex-md-wrap m-auto'>
+                            <div className=''>
+                                <div className='d-flex flex-nowrap justify=content-space m-2 '>
+                                    <div className='w-100 text-start'>Word Points: </div>
+                                    <div className='w-100 text-end'>{pointTotal}</div>
+                                </div>
+                                <div className='d-flex justify-content-evenly m-2 '>
+                                    <div className='w-100 text-start'>Word Length: </div>
+                                    <div className='w-100 text-end'>
+                                        {usedCards.length}
+                                    </div>
+                                </div>
+                                <div className='flex d-flex flex-nowrap  m-2 '>
+                                    <div className='w-100 text-start'>Total Score: </div>
+                                    <div className='w-100 text-end'>{score}</div>
+                                </div>
+                            </div>
+                            <div className='d-flex flex-md-column flex-wrap flex-md-nowrap'>
                                 <Button
                                     type='submit'
-                                    className='flex-1 btn btn-light'
-                                    onClick={reset}
+                                    className='flex flex-grow-1 btn btn-light m-1'
+                                    onClick={setUpNextHand}
                                 >
                                     reset
                                 </Button>
                                 <Button
-                                    className={`flex-1 btn btn-light ${
+                                    className={`flex flex-grow-1 btn btn-light m-1 ${
                                         shouldAcceptWord && "bg-success text-light"
                                     } ${shouldAcceptWord === false && "bg-warning"}`}
                                     onClick={checkWord}
@@ -236,7 +298,7 @@ function App() {
                                     }`}
                                 </Button>
                                 <Button
-                                    className={`flex-1 btn btn-light ${
+                                    className={`flex flex-grow-1 btn btn-light m-1 ${
                                         willAcceptWord && "bg-success text-light"
                                     } ${willAcceptWord === false && "bg-warning"}`}
                                     onClick={submit}
@@ -249,16 +311,23 @@ function App() {
                                             : "not a word"
                                     }`}
                                 </Button>
-                                    <div className='text-light text-start'>
-                                        Total Score: {score}
-                                    </div>
-                                    <Button className='flex-1 btn btn-light' onClick={startNewGame}>
-                                        New Game
+                                {
+                                    <Button
+                                        className='flex flex-grow-1 btn btn-light m-1'
+                                        onClick={setUpNextHand}
+                                    >
+                                        Next Hand
                                     </Button>
-                            </Stack>
-                        </Row>
-                    </Col>
-                    <Col></Col>
+                                }
+                                <Button
+                                    className='flex flex-grow-1 btn btn-light m-1'
+                                    onClick={isGameActive ? endGame : startNewGame}
+                                >
+                                    {isGameActive ? "End Game" : "New Game"}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 </Row>
             </Container>
         </div>

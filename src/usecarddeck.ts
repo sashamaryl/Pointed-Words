@@ -1,32 +1,29 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PointCardType } from "./PointCard";
 import { tileDistribution } from "./scrabbleDistribution";
+
+function* idGenerator() {
+    let counter = 101;
+    while (true) {
+        yield counter;
+        counter++;
+    }
+}
 
 export default function useCardDeck() {
     const [gridCards, setGridCards] = useState<PointCardType[]>([]);
     const [handCards, setHandCards] = useState<PointCardType[]>([]);
     const [cardDeck, setCardDeck] = useState<PointCardType[]>([]);
     const [allCards, setAllCards] = useState<PointCardType[]>([]);
-
-    function* idGenerator() {
-        let counter = 101;
-        while (true) {
-            yield counter;
-            counter++;
-        }
-    }
+    const genId = useRef<Generator<number, void, unknown>>();
 
     const shuffle = useCallback((deck: PointCardType[]): PointCardType[] => {
         let m = deck.length,
             t,
             i;
 
-        // While there remain elements to shuffle…
         while (m) {
-            // Pick a remaining element…
             i = Math.floor(Math.random() * m--);
-
-            // And swap it with the current element.
             t = deck[m];
             deck[m] = deck[i];
             deck[i] = t;
@@ -35,7 +32,20 @@ export default function useCardDeck() {
         return deck;
     }, []);
 
-    const makeNewDeck = () => {};
+    useEffect(() => {
+        genId.current = idGenerator();
+    });
+
+    const createCard = (letter?: string, value?: number) => {
+        const nextId = genId.current?.next();
+
+        const card: PointCardType = {
+            id: nextId?.value as number,
+            letter: letter || "",
+            value: value || 0,
+        };
+        return card;
+    };
 
     useEffect(() => {
         if (cardDeck.length !== 0) return;
@@ -43,62 +53,93 @@ export default function useCardDeck() {
         const cards = [];
 
         const { letters } = tileDistribution;
-        const genId = idGenerator();
         for (const [key, value] of Object.entries(letters)) {
             const { points, tiles } = value;
             let count = 0;
             while (count < tiles) {
-                const nextId = genId.next();
-                if (nextId.done) break;
-                const card: PointCardType = {
-                    id: nextId.value as number,
-                    letter: key,
-                    value: points,
-                };
+                const card = createCard(key, points);
                 cards.push(card);
                 count++;
             }
         }
 
-        setAllCards(cards)
+        setAllCards(cards);
         const shuffledcards = shuffle(cards);
 
         setCardDeck(shuffledcards);
     }, [cardDeck, shuffle]);
 
     const deal = useCallback(() => {
-        console.log(cardDeck);
         const flopCards = cardDeck.slice(0, 9);
         setGridCards(flopCards);
         const hand = cardDeck.slice(9, 12);
         setHandCards(hand);
 
-        console.log(flopCards, hand);
         setCardDeck(cardDeck.slice(12));
     }, [cardDeck]);
 
-    function drawOne(): PointCardType | undefined {
-        if (cardDeck.length === 0) return;
-        const cards = cardDeck;
-        const card = cards[0];
-        setCardDeck(cards.slice(1));
-        return card;
-    }
+    const clearCards = () => {
+        setHandCards([]);
+        setGridCards([]);
+        setCardDeck([]);
+    };
 
-    function drawNumber(num: number) {
-        const cards = [];
-        while (cards.length < num) {
-            cards.push(drawOne());
+    const drawOne = useCallback((): PointCardType | undefined => {
+        if (cardDeck.length === 0) {
+            clearCards();
+            return;
         }
-        return cards;
-    }
+        const cards = cardDeck;
+        const card = cards.splice(0, 1)[0];
+        console.log(card, cards);
+        setCardDeck(cards);
+        return card;
+    }, [cardDeck]);
 
-    const removeCard = useCallback(
-        (card: PointCardType) => {
-            setGridCards(gridCards.filter((t) => t.id !== card.id));
-            setHandCards(handCards.filter((t) => t.id !== card.id));
+    const drawNumber = useCallback(
+        (num: number) => {
+            const cards = cardDeck.slice(0, num);
+            const rest = cardDeck.slice(num);
+            setCardDeck(rest);
+            return cards;
         },
-        [handCards, gridCards]
+        [cardDeck]
+    );
+
+    const refillGrid = useCallback(
+        (usedCards: PointCardType[]) => {
+            const usedIds = usedCards.map((card) => card.id);
+
+            const newGrid = gridCards.map((c) => {
+                if (usedIds.includes(c.id)) {
+                    return drawOne() || createCard("blank", 0);
+                } else {
+                    return c;
+                }
+            });
+
+            setGridCards(newGrid);
+
+            if (gridCards.length >= 9) return;
+
+            const spots = 9 - gridCards.length;
+            const replacementCards = cardDeck.splice(0, spots);
+            console.log(replacementCards);
+            replacementCards && setGridCards((prevState) => [...prevState, ...replacementCards]);
+        },
+        [cardDeck, drawOne, gridCards]
+    );
+
+    const tradeInHandCard = useCallback(
+        (index: number) => {
+            const hand: PointCardType[] = handCards;
+            const deck: PointCardType[] = cardDeck;
+            const replacement = deck.splice(0, 1)[0];
+            hand.splice(index, 1, replacement);
+            setCardDeck(deck);
+            setHandCards(hand);
+        },
+        [cardDeck, handCards]
     );
 
     const idCardLookup = useCallback(
@@ -118,13 +159,14 @@ export default function useCardDeck() {
         cardDeck,
         gridCards,
         handCards,
+        clearCards,
+        tradeInHandCard,
+        refillGrid,
         deal,
         shuffle,
         drawOne,
         drawNumber,
-        removeCard,
         idCardLookup,
         idCardLookupMulti,
-        makeNewDeck,
     };
 }
