@@ -91,7 +91,6 @@ export default function useCardDeck() {
         }
         const cards = cardDeck;
         const card = cards.splice(0, 1)[0];
-        console.log(card, cards);
         setCardDeck(cards);
         return card;
     }, [cardDeck]);
@@ -106,7 +105,9 @@ export default function useCardDeck() {
         [cardDeck]
     );
 
-    const refillGrid = useCallback(
+    
+
+    const redealCards = useCallback(
         (usedCards: PointCardType[]) => {
             const usedIds = usedCards.map((card) => card.id);
 
@@ -118,16 +119,24 @@ export default function useCardDeck() {
                 }
             });
 
-            setGridCards(newGrid);
+            const newHand = handCards.map((c) => {
+                if (usedIds.includes(c.id)) {
+                    return drawOne() || createCard("blank", 0);
+                } else {
+                    return c;
+                }
+            })
 
+            setGridCards(newGrid);
+            setHandCards(newHand);
+            
             if (gridCards.length >= 9) return;
 
             const spots = 9 - gridCards.length;
             const replacementCards = cardDeck.splice(0, spots);
-            console.log(replacementCards);
             replacementCards && setGridCards((prevState) => [...prevState, ...replacementCards]);
         },
-        [cardDeck, drawOne, gridCards]
+        [cardDeck, drawOne, gridCards, handCards]
     );
 
     const tradeInHandCard = useCallback(
@@ -161,7 +170,7 @@ export default function useCardDeck() {
         handCards,
         clearCards,
         tradeInHandCard,
-        refillGrid,
+        redealCards,
         deal,
         shuffle,
         drawOne,
