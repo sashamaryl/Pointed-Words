@@ -109,6 +109,10 @@ export default function useCardDeck() {
 
     const redealCards = useCallback(
         (usedCards: PointCardType[]) => {
+            if (cardDeck.length <= 0) {
+                return false
+            }
+
             const usedIds = usedCards.map((card) => card.id);
 
             const newGrid = gridCards.map((c) => {
@@ -135,6 +139,9 @@ export default function useCardDeck() {
             const spots = 9 - gridCards.length;
             const replacementCards = cardDeck.splice(0, spots);
             replacementCards && setGridCards((prevState) => [...prevState, ...replacementCards]);
+        
+        
+            return true
         },
         [cardDeck, drawOne, gridCards, handCards]
     );

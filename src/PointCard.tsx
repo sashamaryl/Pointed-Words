@@ -1,7 +1,4 @@
-import { relative } from "path";
 import React, { useCallback, useEffect, useState } from "react";
-import { Fade } from "react-bootstrap";
-import { Transition } from "react-transition-group";
 
 export type PointCardType = {
     id: number;
@@ -46,7 +43,8 @@ export default function PointCard({
 
     useEffect(() => {
         cardState === "entering" && setCardState("unselected");
-    }, [cardState]);
+        !used && setCardState("unselected")
+    }, [cardState, used]);
 
     const cardStyle = {
         transition: "linear 500ms",

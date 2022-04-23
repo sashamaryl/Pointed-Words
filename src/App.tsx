@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Button } from "react-bootstrap";
 import Container from "react-bootstrap/esm/Container";
 import "./App.css";
+import { ResultText } from "./common";
 import "./custom.scss";
 import isValidWord from "./dictionary";
 import { WordDisplay } from "./DisplayLetter";
 import PointCard, { PointCardType } from "./PointCard";
-import { GameStateType } from "./types";
+import { GameStateType, isInSubmitState, wordWasAccepted, wordWasRejected } from "./types";
 import useCardDeck from "./usecarddeck";
 
 function App() {
@@ -44,11 +45,13 @@ function App() {
     useEffect(() => {
         if (usedCardIds.length <= 0) return;
 
-        const cards = idCardLookupMulti(usedCardIds);
+        if (gameState === "word-building") {
+            const cards = idCardLookupMulti(usedCardIds);
 
-        const points = cards.map((card) => card?.value ?? 0).reduce((a, b) => a + b);
+            const points = cards.map((card) => card?.value ?? 0).reduce((a, b) => a + b);
 
-        gameState === "word-building" && setPointTotal(points);
+            setPointTotal(points);
+        }
     }, [gameState, idCardLookupMulti, usedCardIds, usedCards]);
 
     useEffect(() => {
@@ -79,18 +82,20 @@ function App() {
     );
 
     const setUpNextHand = useCallback(() => {
-        setGameState("resetting");
-        tradeCards.forEach(tradeInHandCard);
-        redealCards(usedCards);
+        if (gameState === "discarding") {
+            tradeCards.forEach(tradeInHandCard);
+            const cardsRemaining = redealCards(usedCards);
+            if (!cardsRemaining) {
+                setGameState("game-over");
+            }
+        }
 
+        setGameState("resetting");
         setUsedCards([]);
         setUsedCardIds([]);
         setTradeCards([]);
-        resetChecks();
         setGameState("word-building");
-    }, [redealCards, tradeCards, tradeInHandCard, usedCards]);
-
-    const resetChecks = () => {};
+    }, [gameState, redealCards, tradeCards, tradeInHandCard, usedCards]);
 
     const getWordFromCards = useCallback(() => {
         const letters: string[] = [];
@@ -154,58 +159,82 @@ function App() {
     return (
         <div className='App bg-secondary vh-100 vw-100'>
             {injectStyles()}
-            <Container className='h-100 col col-md-6 col-l-4 border border-danger'>
-                <div className='pt-5 text-light'>
+            <Container className='h-100 col col-md-6 col-l-4'>
+                <div id='header' className='pt-5 text-light'>
                     <h1 className=' text-light'>Pointed Words</h1>
                     <div className=' text-light'>A game by Gene Mackles.</div>
                     <div>
                         Web app by me: <em>Eloise.</em>
                     </div>
                 </div>
-                <div className='m-auto h-25'>
-                    <div className='d-flex h-25 flex-row align-items-end col-9 mx-auto border-bottom'>
-                        <WordDisplay usedCards={usedCards} />
-                        <div
-                            onTransitionEnd={() =>
-                                gameState === "submit-accept" && setGameState("discarding")
-                            }
-                            className={`my-transition-50 ${
-                                gameState === "submit-accept" || gameState === "discarding"
-                                    ? "opacity-100"
-                                    : "opacity-0"
-                            } fs-1 text-uppercase width-25 text-light text-align-right ms-auto`}
-                        >
-                            it's good!!
-                        </div>
-                        {gameState === "submit-reject" && (
-                            <div
-                                className={
-                                    " fs-1 text-uppercase width-25 text-light text-align-right ms-auto"
-                                }
-                            >
-                                try again
+                <div id='gameboard' className='m-auto h-25'>
+                    <div
+                        id='word-tray'
+                        className='d-flex h-25 w-75 flex-row align-items-end mx-auto border-bottom'
+                    >
+                        {usedCards.length <= 0 && (
+                            <div className='text-light m-auto'>
+                                Select from the cards below to make a word
                             </div>
+                        )}
+                        <WordDisplay usedCards={usedCards} />
+                        <ResultText
+                            show={isInSubmitState(gameState)}
+                            action={() => {
+                                gameState === "submit-accept" && setGameState("discarding");
+                                gameState === "submit-reject" && setGameState("confirm-reject");
+                            }}
+                            text={
+                                wordWasAccepted(gameState)
+                                    ? "is a word!"
+                                    : wordWasRejected(gameState)
+                                    ? "not a word"
+                                    : ""
+                            }
+                        />
+                        {isGameActive && (
+                            <Button
+                                disabled={usedCards.length <= 0}
+                                type='submit'
+                                className='flex flex-grow-0 btn btn-light m-1 ms-auto'
+                                onClick={setUpNextHand}
+                            >
+                                reset
+                            </Button>
                         )}
                     </div>
                     {isGameActive && (
-                        <div className='d-flex col-7 m-auto'>
-                            <div className='col ms-auto me-0'>
-                                <div className='d-flex col flex-nowrap align-items-center border m-2 px-2'>
-                                    <div className='w-100 text-start text-light '>
-                                        Word Points:{" "}
+                        <div className='d-flex m-auto'>
+                            <div className='d-flex m-auto my-4'>
+                                <div className='d-flex flex-nowrap align-items-center border m-2 px-2'>
+                                    <div className='text-start text-light '>Word Points: </div>
+                                    <div className='w-100 text-end text-light fs-3'>
+                                        {pointTotal}
                                     </div>
-                                    <div className='w-100 text-end text-light'>{pointTotal}</div>
                                 </div>
-                            </div>
-                            <div className='col ms-auto me-0'>
-                                <div className='d-flex col flex-nowrap align-items-center border m-2 px-2 '>
-                                    <div className='w-100 text-start text-light'>Total Score: </div>
-                                    <div className='w-100 text-end text-light'>{score}</div>
-                                </div>
+                                <Button
+                                    className={`flex flex-grow-0 btn btn-light m-1`}
+                                    onClick={
+                                        gameState === "discarding"
+                                            ? setUpNextHand
+                                            : gameState === "confirm-reject"
+                                            ? () => setGameState("word-building")
+                                            : submit
+                                    }
+                                >
+                                    {`${
+                                        gameState === "discarding" || gameState === "confirm-reject"
+                                            ? "continue"
+                                            : "submit"
+                                    }`}
+                                </Button>
                             </div>
                         </div>
                     )}
-                    <div className='d-flex flex-column m-auto'>
+                    <div id='card-area' className='d-flex flex-column m-auto'>
+                        <div className='text-light mb-2'>
+                            {gridCards.length > 0 && "Shared Cards"}
+                        </div>
                         <div className='d-flex flex-wrap gap-3 justify-content-center'>
                             {gridCards.map((card: PointCardType, index: number) => {
                                 const { id } = card;
@@ -225,7 +254,11 @@ function App() {
                             <div className='text-light mb-2'>
                                 {handCards.length > 0 && "Your Cards"}
                             </div>
-                            <div className='d-flex  gap-3 justify-content-center'>
+                            <div className='text-light mb-2'>
+                                {gameState === "discarding" &&
+                                    "Pick any cards you would like to trade in"}
+                            </div>
+                            <div className='d-flex gap-3 justify-content-center'>
                                 {handCards.map((card: PointCardType, index: number) => {
                                     const { id } = card;
                                     return (
@@ -251,7 +284,7 @@ function App() {
                                                         !usedCardIds.includes(card.id)
                                                             ? "opacity-100"
                                                             : "opacity-0"
-                                                    } my-overlay w-md-75 shadow  text-white`}
+                                                    } my-overlay w-md-75 shadow text-white`}
                                                     onClick={() => {
                                                         tradeCards.includes(index)
                                                             ? setTradeCards((prevState) => {
@@ -276,32 +309,31 @@ function App() {
                         <div className='d-flex flex-nowrap m-auto'>
                             <div className='d-flex col'>
                                 {isGameActive && (
-                                    <>
-                                        {" "}
-                                        <Button
-                                            type='submit'
-                                            className='flex flex-grow-1 btn btn-light m-1'
-                                            onClick={setUpNextHand}
-                                        >
-                                            reset
-                                        </Button>
-                                        <Button
-                                            className={`flex flex-grow-1 btn btn-light m-1`}
-                                            onClick={
-                                                gameState === "discarding" ? setUpNextHand : submit
-                                            }
-                                        >
-                                            {`${
-                                                gameState === "discarding" ? "continue" : "submit"
-                                            }`}
-                                        </Button>
-                                    </>
+                                    <div className='col ms-auto me-0'>
+                                        <div className='d-flex col flex-nowrap align-items-center border m-2 px-2 '>
+                                            <div className='w-100 text-start text-light'>
+                                                Total Score:{" "}
+                                            </div>
+                                            <div className='w-100 text-end text-light fs-3'>
+                                                {score}
+                                            </div>
+                                        </div>
+                                    </div>
                                 )}
                                 <Button
-                                    className='flex flex-grow-1 btn btn-light m-1'
+                                    className='flex flex-grow-0 btn btn-light m-1'
                                     onClick={isGameActive ? endGame : startNewGame}
                                 >
                                     {isGameActive ? "quit" : "start new game"}
+                                </Button>
+                                <Button
+                                    disabled={gameState !== "discarding"}
+                                    className={`flex flex-grow-0 btn btn-primary m-1 my-transition-50 opacity-0 ${
+                                        gameState === "discarding" && "opacity-100"
+                                    }`}
+                                    onClick={setUpNextHand}
+                                >
+                                    continue
                                 </Button>
                             </div>
                         </div>
