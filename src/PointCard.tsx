@@ -48,11 +48,7 @@ export default function PointCard({
         cardState === "entering" && setCardState("unselected");
     }, [cardState]);
 
-
     const cardStyle = {
-        height: "auto",
-        width: "8em",
-        opacity: 1,
         transition: "linear 500ms",
     };
 
@@ -66,17 +62,11 @@ export default function PointCard({
     };
 
     return (
-        <div>
-            <div
-                className={`${cardStateClasses[cardState]}`}
-                style={cardStyle}
-                onClick={handleClick}
-            >
-                <div className={` text-start ms-1`}>
-                    {value} point{value === 1 ? "" : "s"}
-                </div>
-                <div className={` fs-1 text-uppercase`}>{letter}</div>
+        <div className={` ${cardStateClasses[cardState]} `} style={cardStyle} onClick={handleClick}>
+            <div className={`text-start fs-6 ms-1`}>
+                {value} point{value === 1 ? "" : "s"}
             </div>
+            <div className={`fs-1 text-uppercase`}>{letter}</div>
         </div>
     );
 }
