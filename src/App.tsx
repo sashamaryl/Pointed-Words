@@ -172,7 +172,7 @@ function App() {
                         id='word-tray'
                         className='d-flex h-25 w-75 flex-row align-items-end mx-auto border-bottom'
                     >
-                        {usedCards.length <= 0 && (
+                        {isGameActive && usedCards.length <= 0 && (
                             <div className='text-light m-auto'>
                                 Select from the cards below to make a word
                             </div>
@@ -321,20 +321,22 @@ function App() {
                                     </div>
                                 )}
                                 <Button
-                                    className='flex flex-grow-0 btn btn-light m-1'
+                                    className='flex flex-grow-0 btn btn-light m-auto'
                                     onClick={isGameActive ? endGame : startNewGame}
                                 >
                                     {isGameActive ? "quit" : "start new game"}
                                 </Button>
-                                <Button
-                                    disabled={gameState !== "discarding"}
-                                    className={`flex flex-grow-0 btn btn-primary m-1 my-transition-50 opacity-0 ${
-                                        gameState === "discarding" && "opacity-100"
-                                    }`}
-                                    onClick={setUpNextHand}
-                                >
-                                    continue
-                                </Button>
+                                {isGameActive && (
+                                    <Button
+                                        disabled={gameState !== "discarding"}
+                                        className={`flex flex-grow-0 btn btn-primary m-1 my-transition-50 opacity-0 ${
+                                            gameState === "discarding" && "opacity-100"
+                                        }`}
+                                        onClick={setUpNextHand}
+                                    >
+                                        continue
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </div>
